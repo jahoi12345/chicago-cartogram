@@ -484,11 +484,25 @@ function insertNearestStationCandidate(nearest, candidate, limit) {
 // distance scans. Chicago's multimodal graph (CTA rail + CTA bus + Metra + Pace) has
 // tens of thousands of stations once bus/Pace is enabled, unlike the subway-only
 // networks this rendering approach was originally built for.
-const STATION_SPATIAL_BIN_SIZE = 600;
+//
+// Bin size is adaptive: it's derived from station count vs. map area so each bin
+// holds roughly one station on average. A fixed bin size tuned for the dense
+// bus/Pace case (thousands of stops) made ring search over the sparse subway-only
+// case (~145 stations across the full regional bbox) expand dozens of rings per
+// grid cell -- an 8s+ stall building the cell-access cache before warp ever draws.
+const MIN_STATION_BIN_SIZE = 150;
+const MAX_STATION_BIN_SIZE = 4000;
 const stationSpatialIndexByList = new WeakMap();
 
 function spatialBinKey(x, y, cellSize) {
   return `${Math.floor(x / cellSize)}:${Math.floor(y / cellSize)}`;
+}
+
+function adaptiveStationBinSize(count) {
+  const [minX, minY, maxX, maxY] = state.data.meta.bounds;
+  const area = Math.max(1, (maxX - minX) * (maxY - minY));
+  const spacing = Math.sqrt(area / Math.max(1, count));
+  return Math.min(MAX_STATION_BIN_SIZE, Math.max(MIN_STATION_BIN_SIZE, spacing));
 }
 
 function buildStationSpatialIndex(indices, cellSize) {
@@ -509,36 +523,34 @@ function buildStationSpatialIndex(indices, cellSize) {
 function spatialIndexForStationList(indices) {
   let cached = stationSpatialIndexByList.get(indices);
   if (!cached) {
-    cached = buildStationSpatialIndex(indices, STATION_SPATIAL_BIN_SIZE);
+    cached = buildStationSpatialIndex(indices, adaptiveStationBinSize(indices.length));
     stationSpatialIndexByList.set(indices, cached);
   }
   return cached;
 }
 
-// Expands outward ring-by-ring from the query point's bin, gathering candidates
-// until at least `minCount` are found, plus one extra ring so a slightly-closer
-// station just across a bin boundary isn't missed. Only these candidates get an
-// exact distance/sort pass, instead of every active station.
+// Doubles the search radius (in bins) each time there aren't enough candidates yet,
+// instead of expanding one bin-ring at a time. With an adaptive bin size this
+// usually resolves in 1-2 iterations; doubling keeps genuinely sparse areas (a
+// grid cell far from any station of the active mode) bounded to a handful of
+// iterations instead of dozens. Only the resulting candidates get an exact
+// distance/sort pass, not every active station.
 function stationsNearPoint(spatialIndex, point, minCount) {
   const { bins, cellSize } = spatialIndex;
   const cx = Math.floor(point[0] / cellSize);
   const cy = Math.floor(point[1] / cellSize);
-  const found = [];
-  let ring = 0;
-  let extraRings = 0;
-  while (ring <= 64) {
-    for (let dx = -ring; dx <= ring; dx += 1) {
-      for (let dy = -ring; dy <= ring; dy += 1) {
-        if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
+  let radius = 1;
+  let found = [];
+  while (radius <= 128) {
+    found = [];
+    for (let dx = -radius; dx <= radius; dx += 1) {
+      for (let dy = -radius; dy <= radius; dy += 1) {
         const bucket = bins.get(`${cx + dx}:${cy + dy}`);
         if (bucket) found.push(...bucket);
       }
     }
-    if (found.length >= minCount) {
-      extraRings += 1;
-      if (extraRings > 1) break;
-    }
-    ring += 1;
+    if (found.length >= minCount) break;
+    radius *= 2;
   }
   return found;
 }
