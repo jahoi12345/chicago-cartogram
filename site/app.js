@@ -480,15 +480,80 @@ function insertNearestStationCandidate(nearest, candidate, limit) {
   if (nearest.length > limit) nearest.length = limit;
 }
 
+// Coarse grid used to avoid O(cells * activeStations) / O(activeStations) brute-force
+// distance scans. Chicago's multimodal graph (CTA rail + CTA bus + Metra + Pace) has
+// tens of thousands of stations once bus/Pace is enabled, unlike the subway-only
+// networks this rendering approach was originally built for.
+const STATION_SPATIAL_BIN_SIZE = 600;
+const stationSpatialIndexByList = new WeakMap();
+
+function spatialBinKey(x, y, cellSize) {
+  return `${Math.floor(x / cellSize)}:${Math.floor(y / cellSize)}`;
+}
+
+function buildStationSpatialIndex(indices, cellSize) {
+  const bins = new Map();
+  for (const index of indices) {
+    const point = state.data.stations[index].point;
+    const key = spatialBinKey(point[0], point[1], cellSize);
+    let bucket = bins.get(key);
+    if (!bucket) {
+      bucket = [];
+      bins.set(key, bucket);
+    }
+    bucket.push(index);
+  }
+  return { bins, cellSize };
+}
+
+function spatialIndexForStationList(indices) {
+  let cached = stationSpatialIndexByList.get(indices);
+  if (!cached) {
+    cached = buildStationSpatialIndex(indices, STATION_SPATIAL_BIN_SIZE);
+    stationSpatialIndexByList.set(indices, cached);
+  }
+  return cached;
+}
+
+// Expands outward ring-by-ring from the query point's bin, gathering candidates
+// until at least `minCount` are found, plus one extra ring so a slightly-closer
+// station just across a bin boundary isn't missed. Only these candidates get an
+// exact distance/sort pass, instead of every active station.
+function stationsNearPoint(spatialIndex, point, minCount) {
+  const { bins, cellSize } = spatialIndex;
+  const cx = Math.floor(point[0] / cellSize);
+  const cy = Math.floor(point[1] / cellSize);
+  const found = [];
+  let ring = 0;
+  let extraRings = 0;
+  while (ring <= 64) {
+    for (let dx = -ring; dx <= ring; dx += 1) {
+      for (let dy = -ring; dy <= ring; dy += 1) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
+        const bucket = bins.get(`${cx + dx}:${cy + dy}`);
+        if (bucket) found.push(...bucket);
+      }
+    }
+    if (found.length >= minCount) {
+      extraRings += 1;
+      if (extraRings > 1) break;
+    }
+    ring += 1;
+  }
+  return found;
+}
+
 function buildCellAccessForActiveTransit() {
   const activeIndices = activeTransitStationIndices();
+  const spatialIndex = spatialIndexForStationList(activeIndices);
   const accessByCellIndex = new Array(state.data.cells.length);
   const nearestCount = state.data.meta.cellNearestStations;
 
   for (let cellIndex = 0; cellIndex < state.data.cells.length; cellIndex += 1) {
     const cell = state.data.cells[cellIndex];
+    const candidates = stationsNearPoint(spatialIndex, cell.point, nearestCount);
     const nearest = [];
-    for (const stationIndex of activeIndices) {
+    for (const stationIndex of candidates) {
       insertNearestStationCandidate(
         nearest,
         {
@@ -506,9 +571,6 @@ function buildCellAccessForActiveTransit() {
 
 function cellTransitAccess(cell, cellIndex) {
   if (!hasActiveTransitMode()) return [];
-  if (state.activeModes.bus) {
-    return cell.access || [];
-  }
 
   const signature = activeModeSignature();
   if (state.cellAccessCache?.signature !== signature) {
@@ -1734,7 +1796,9 @@ function dynamicEdgesForState(fromIndex) {
 
 function nearestStations(point, count, candidateIndices = null) {
   const settings = currentTravelSettings();
-  const indices = candidateIndices || state.data.stations.map((_, index) => index);
+  const indices = candidateIndices
+    ? stationsNearPoint(spatialIndexForStationList(candidateIndices), point, count)
+    : state.data.stations.map((_, index) => index);
   return indices
     .map((index) => {
       const station = state.data.stations[index];
