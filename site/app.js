@@ -919,6 +919,38 @@ function normalizeTravelPoint(point) {
   };
 }
 
+// Grid cell points never change once loaded, so classifySurface's unindexed
+// point-in-polygon scan (over every neighborhood boundary ring) only ever
+// needs to run once per cell instead of once per cell per warp computation.
+// This was the dominant per-frame cost while dragging the origin: every
+// pointer move recomputes the warp for a fresh origin, and without this
+// cache each of those recomputes re-ran the full polygon scan for every
+// sampled grid cell.
+const cellNormalizedPointCache = new Map();
+function normalizedCellPoint(cellIndex) {
+  let cached = cellNormalizedPointCache.get(cellIndex);
+  if (!cached) {
+    cached = normalizeTravelPoint(state.data.cells[cellIndex].point);
+    cellNormalizedPointCache.set(cellIndex, cached);
+  }
+  return cached;
+}
+
+// Same fix as normalizedCellPoint, for station points: summarizeReachability()
+// calls this once per active station (up to ~25k with bus/Pace on) on every
+// "full" quality warp -- including the settle pass right after every drag --
+// so leaving it unindexed made releasing the origin pin freeze for seconds
+// whenever bus or Metra was enabled.
+const stationNormalizedPointCache = new Map();
+function normalizedStationPoint(stationIndex) {
+  let cached = stationNormalizedPointCache.get(stationIndex);
+  if (!cached) {
+    cached = normalizeTravelPoint(state.data.stations[stationIndex].point);
+    stationNormalizedPointCache.set(stationIndex, cached);
+  }
+  return cached;
+}
+
 function lerp(a, b, t) {
   return a + (b - a) * t;
 }
@@ -1987,8 +2019,8 @@ function summarizeReachability(origin, originDistances) {
   const totalStations = stationEntries.length;
   let reachableStations = 0;
 
-  for (const { station, index } of stationEntries) {
-    const destination = normalizeTravelPoint(station.point);
+  for (const { index } of stationEntries) {
+    const destination = normalizedStationPoint(index);
     let bestMinutes = directTravelMinutes(origin, destination);
     for (const routeStateIndex of state.data.stationStates[index] || []) {
       if (!isRouteStateEnabled(routeStateIndex)) continue;
@@ -2064,7 +2096,7 @@ function computeWarp(origin, options = WARP_QUALITY_OPTIONS.full) {
     if (cellIndex === -1) continue;
     const cell = state.data.cells[cellIndex];
     if (cell.row % sampleStep !== 0 || cell.col % sampleStep !== 0) continue;
-    const destination = normalizeTravelPoint(cell.point);
+    const destination = normalizedCellPoint(cellIndex);
     let bestMinutes = directTravelMinutes(origin, destination);
     for (const [stationIndex] of cellTransitAccess(cell, cellIndex)) {
       if (!stationHasEnabledRoute(stationIndex)) continue;
@@ -3615,6 +3647,19 @@ async function init() {
   state.dynamicAdjacencyCache = new Array(state.data.routeStates.length);
   state.isMobile = isMobileLayout();
   state.baseMapCache = null;
+  // Pre-warm the cell/station surface classification caches while the
+  // "Loading transit network..." status is still showing. Both caches are
+  // keyed by fixed geometry (grid cell / station points never change), so
+  // this cost only needs to happen once, ever -- doing it here means it
+  // lands during the expected load wait instead of surfacing later as an
+  // unexplained freeze the first time reachability runs against a station
+  // set it hasn't seen yet (e.g. right after switching on Bus/Pace).
+  for (let cellIndex = 0; cellIndex < state.data.cells.length; cellIndex += 1) {
+    normalizedCellPoint(cellIndex);
+  }
+  for (let stationIndex = 0; stationIndex < state.data.stations.length; stationIndex += 1) {
+    normalizedStationPoint(stationIndex);
+  }
   state.ready = true;
 
   state.cursorPoint = null;
