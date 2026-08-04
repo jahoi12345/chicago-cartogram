@@ -2091,6 +2091,15 @@ function computeWarp(origin, options = WARP_QUALITY_OPTIONS.full) {
     }
   };
 
+  // Tracks whether *anything* on the map is reachable within the current max
+  // transit time. When an origin is far from any station of the active
+  // mode(s) -- e.g. dropped between two Metra stops in the exurbs, where
+  // walking to the nearest one alone can take well over an hour -- every
+  // cell's bestMinutes stays at/above maxTransitTime, so minuteToAreaWeight()
+  // returns the neutral weight everywhere and the warp has nothing to
+  // displace. That's mathematically correct, but left unindicated it reads
+  // as "the warp is broken" instead of "nothing is reachable from here."
+  let anyReachable = false;
   for (let maskIndex = 0; maskIndex < state.data.mask.length; maskIndex += 1) {
     const cellIndex = state.data.mask[maskIndex];
     if (cellIndex === -1) continue;
@@ -2108,6 +2117,7 @@ function computeWarp(origin, options = WARP_QUALITY_OPTIONS.full) {
         bestMinutes = Math.min(bestMinutes, distances[routeStateIndex] + egressMinutes);
       }
     }
+    if (bestMinutes < settings.maxTransitTime) anyReachable = true;
     assignMinuteBlock(cell.row, cell.col, bestMinutes);
   }
 
@@ -2341,6 +2351,7 @@ function computeWarp(origin, options = WARP_QUALITY_OPTIONS.full) {
     expansion,
     areaWeights,
     validMask,
+    anyReachable,
   };
 }
 
@@ -2744,18 +2755,24 @@ function drawMap(drawCtx, width, height) {
     : state.isMobile
       ? null
       : state.cursorScreen;
+  const nothingReachable = warp && warp.anyReachable === false;
+  const unreachableNote = nothingReachable
+    ? ` — nothing reachable within ${Math.round(currentTravelSettings().maxTransitTime)} min from here, so the map has nothing to warp. Try a point closer to a station, or raise "Maximum transit time" in Settings.`
+    : "";
   if (state.originPoint && activeProbePoint) {
     const probe = measureProbeFromWarp(normalizedOrigin, warp, activeProbePoint);
-    statusText.textContent = station ? `Pinned near ${station.name}` : "Pinned origin";
+    statusText.textContent = (station ? `Pinned near ${station.name}` : "Pinned origin") + unreachableNote;
     if (layerVisible("interactionMarkers") && probe && activeProbeScreen) {
       drawHoverTooltip(drawCtx, activeProbeScreen, formatDistanceLabel(probe.baseMinutes, probe.swimMinutes));
     }
   } else {
-    statusText.textContent = station
-      ? `${state.showWarp ? "Warped" : "Shown"} from near ${station.name}`
-      : state.showWarp
-        ? "Warped commute-time view"
-        : "Geographic commute-time view";
+    statusText.textContent = nothingReachable
+      ? `Pinned near ${station?.name ?? "your origin"}${unreachableNote}`
+      : station
+        ? `${state.showWarp ? "Warped" : "Shown"} from near ${station.name}`
+        : state.showWarp
+          ? "Warped commute-time view"
+          : "Geographic commute-time view";
   }
   syncMobileSheet();
 }
