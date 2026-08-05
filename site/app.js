@@ -2756,7 +2756,18 @@ function drawMap(drawCtx, width, height) {
     : state.isMobile
       ? null
       : state.cursorScreen;
-  const nothingReachable = warp && warp.anyReachable === false;
+  // warp.reachability (exact, per-station) and warp.anyReachable (coarse,
+  // sampled grid cells used to drive the visual warp) can disagree: a small
+  // reachable pocket can fall between grid samples and get missed by
+  // anyReachable while summarizeReachability still finds it via the real
+  // station points. Trust the exact station check whenever it ran (the
+  // settled "full" pass); only fall back to the cell sample during a live
+  // drag, where reachability is skipped for performance.
+  const nothingReachable = warp
+    ? warp.reachability
+      ? warp.reachability.reachableStations === 0
+      : warp.anyReachable === false
+    : false;
   const unreachableNote = nothingReachable
     ? ` — nothing reachable within ${Math.round(currentTravelSettings().maxTransitTime)} min from here, so the map has nothing to warp. Try a point closer to a station, or raise "Maximum transit time" in Settings.`
     : "";
