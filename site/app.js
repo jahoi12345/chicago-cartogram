@@ -216,6 +216,7 @@ const settingsSaveButtons = Array.from(document.querySelectorAll("[data-settings
 const settingsMenus = Array.from(document.querySelectorAll(".settings-menu"));
 const travelModeToggles = Array.from(document.querySelectorAll("[data-mode-toggle]"));
 const debugLayerToggles = Array.from(document.querySelectorAll("[data-layer-toggle]"));
+const debugLayerPanel = document.getElementById("debugLayerPanel");
 const ctx = mapCanvas.getContext("2d");
 const panelCard = document.querySelector(".panel-card");
 const footerEmojiLinks = Array.from(document.querySelectorAll("[data-emoji-burst]"));
@@ -3657,6 +3658,13 @@ function useCurrentLocation() {
 }
 
 async function init() {
+  // Layer-visibility debug panel is a dev tool, not something regular
+  // visitors need -- and on narrow screens it overlapped the "How It Works"
+  // card. Keep it available for development via ?debug=1, hidden otherwise.
+  if (debugLayerPanel && !new URLSearchParams(window.location.search).has("debug")) {
+    debugLayerPanel.hidden = true;
+  }
+
   const response = await fetch(DATA_URL);
   state.data = await response.json();
   state.travelSettingsDefaults = getTravelSettingsDefaults();
