@@ -151,6 +151,28 @@ body {
   font-size: 0.92rem;
 }
 
+.origin-frequency-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(215, 92, 46, 0.1);
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.origin-frequency-note::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: 0 0 auto;
+}
+
 .pin-button {
   border: 0;
   border-radius: 999px;
@@ -582,6 +604,99 @@ body {
   font-size: 0.92rem;
   color: var(--muted);
   line-height: 1.45;
+}
+
+.favorites-card {
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.favorites-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.favorites-save-button {
+  border: 1px solid rgba(215, 92, 46, 0.35);
+  background: rgba(215, 92, 46, 0.1);
+  color: var(--accent);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.favorites-save-button:hover:not(:disabled) {
+  background: rgba(215, 92, 46, 0.18);
+}
+
+.favorites-save-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.favorites-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.favorites-empty {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: 0;
+}
+
+.favorite-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(23, 48, 77, 0.1);
+  background: rgba(255, 252, 247, 0.92);
+  border-radius: 999px;
+  padding: 6px 8px 6px 14px;
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+
+.favorite-chip-name {
+  background: none;
+  border: none;
+  font: inherit;
+  color: var(--ink);
+  cursor: pointer;
+  padding: 0;
+  font-weight: 700;
+}
+
+.favorite-chip-name:hover {
+  color: var(--accent);
+}
+
+.favorite-chip-remove {
+  background: rgba(23, 48, 77, 0.08);
+  border: none;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.favorite-chip-remove:hover {
+  background: rgba(215, 92, 46, 0.18);
+  color: var(--accent);
 }
 
 .legend {

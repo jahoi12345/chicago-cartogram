@@ -35,7 +35,6 @@ const LIVE_HEATMAP_CELL_STEP = 2;
 const WARP_LINE_CURVE_TOLERANCE_PX = 2.4;
 const WARP_LINE_MAX_SUBDIVISION_DEPTH = 4;
 const DEFAULT_SWIM_METERS_PER_MINUTE = 28;
-const REACHABILITY_THRESHOLD_MINUTES = 60;
 const SHARE_COORDINATE_DECIMALS = 5;
 const EMOJI_BURST_INTERVAL_MS = 90;
 const EMOJI_BURST_PER_TICK = 3;
@@ -43,6 +42,8 @@ const EMOJI_BURST_LIFETIME_MS = 900;
 const MOBILE_DRAWER_SWIPE_THRESHOLD_PX = 36;
 const METERS_PER_MINUTE_PER_MPH = 26.8224;
 const SETTINGS_STORAGE_KEY = "chicago-cartogram-settings-v1";
+const FAVORITES_STORAGE_KEY = "chicago-cartogram-favorites-v1";
+const MAX_FAVORITES = 12;
 const TRAVEL_MODE_KEYS = ["subway", "metra", "drive", "bus", "bike", "walk"];
 const DEFAULT_TRAVEL_MODES = {
   subway: true,
@@ -157,6 +158,7 @@ const state = {
 
 const mapCanvas = document.getElementById("mapCanvas");
 const statusText = document.getElementById("statusText");
+const originFrequencyNote = document.getElementById("originFrequencyNote");
 const warpToggle = document.getElementById("warpToggle");
 const heatmapToggle = document.getElementById("heatmapToggle");
 const outlineToggle = document.getElementById("outlineToggle");
@@ -187,8 +189,10 @@ const searchResults = document.getElementById("searchResults");
 const reachScoreCard = document.getElementById("reachScoreCard");
 const reachScoreValue = document.getElementById("reachScoreValue");
 const reachScoreMeta = document.getElementById("reachScoreMeta");
+const reachScoreLabels = Array.from(document.querySelectorAll("[data-reach-score-label]"));
 const mobileOriginTitle = document.getElementById("mobileOriginTitle");
 const mobileStatusText = document.getElementById("mobileStatusText");
+const mobileOriginFrequencyNote = document.getElementById("mobileOriginFrequencyNote");
 const mobileClearButton = document.getElementById("mobileClearButton");
 const mobileSheet = document.getElementById("mobileSheet");
 const mobileSheetToggle = document.getElementById("mobileSheetToggle");
@@ -203,6 +207,12 @@ const mobileAddressInput = document.getElementById("mobileAddressInput");
 const mobileSearchButton = document.getElementById("mobileSearchButton");
 const mobileSearchMeta = document.getElementById("mobileSearchMeta");
 const mobileSearchResults = document.getElementById("mobileSearchResults");
+const saveFavoriteButton = document.getElementById("saveFavoriteButton");
+const favoritesList = document.getElementById("favoritesList");
+const favoritesEmpty = document.getElementById("favoritesEmpty");
+const mobileSaveFavoriteButton = document.getElementById("mobileSaveFavoriteButton");
+const mobileFavoritesList = document.getElementById("mobileFavoritesList");
+const mobileFavoritesEmpty = document.getElementById("mobileFavoritesEmpty");
 const mobileLocateButton = document.getElementById("mobileLocateButton");
 const mobileShareButton = document.getElementById("mobileShareButton");
 const mobileMapHelp = document.getElementById("mobileMapHelp");
@@ -245,6 +255,11 @@ const searchUis = [
     meta: mobileSearchMeta,
     results: mobileSearchResults,
   },
+];
+
+const favoritesUis = [
+  { saveButton: saveFavoriteButton, list: favoritesList, empty: favoritesEmpty },
+  { saveButton: mobileSaveFavoriteButton, list: mobileFavoritesList, empty: mobileFavoritesEmpty },
 ];
 
 shareXIcon.src = new URL("./x.png", import.meta.url).toString();
@@ -2018,6 +2033,7 @@ function estimateTravel(origin, originDistances, destinationPoint) {
 function summarizeReachability(origin, originDistances) {
   const stationEntries = activeTransitStationEntries();
   const totalStations = stationEntries.length;
+  const threshold = currentTravelSettings().maxTransitTime;
   let reachableStations = 0;
 
   for (const { index } of stationEntries) {
@@ -2030,7 +2046,7 @@ function summarizeReachability(origin, originDistances) {
         originDistances[routeStateIndex] + state.data.meta.stationAccessPenalty + destination.swimMinutes,
       );
     }
-    if (bestMinutes <= REACHABILITY_THRESHOLD_MINUTES) {
+    if (bestMinutes <= threshold) {
       reachableStations += 1;
     }
   }
@@ -2038,29 +2054,74 @@ function summarizeReachability(origin, originDistances) {
   return {
     reachableStations,
     totalStations,
+    threshold,
     ratio: totalStations ? reachableStations / totalStations : 0,
   };
 }
 
 function syncReachabilityScore(summary = null) {
+  const minutes = Math.round(currentTravelSettings().maxTransitTime);
+  const label = `${minutes}-Minute Reach`;
+  for (const el of reachScoreLabels) el.textContent = label;
+
   if (!summary) {
     reachScoreCard.hidden = true;
     reachScoreValue.textContent = "-- / --";
-    reachScoreMeta.textContent = "Choose an origin to see how much of the regional transit stops you can reach in an hour.";
+    reachScoreMeta.textContent = `Choose an origin to see how much of the regional transit stops you can reach in ${minutes} minutes.`;
     if (mobileReachValue && mobileReachMeta) {
       mobileReachValue.textContent = "-- / --";
-      mobileReachMeta.textContent = "Choose an origin to see how much of the regional transit stops you can reach in an hour.";
+      mobileReachMeta.textContent = `Choose an origin to see how much of the regional transit stops you can reach in ${minutes} minutes.`;
     }
     return;
   }
 
   reachScoreCard.hidden = false;
   const percent = Math.round(summary.ratio * 100);
+  const summaryMinutes = Math.round(summary.threshold ?? minutes);
   reachScoreValue.textContent = `${summary.reachableStations} / ${summary.totalStations}`;
-  reachScoreMeta.textContent = `${percent}% of stations are reachable within ${REACHABILITY_THRESHOLD_MINUTES} minutes.`;
+  reachScoreMeta.textContent = `${percent}% of stations are reachable within ${summaryMinutes} minutes.`;
   if (mobileReachValue && mobileReachMeta) {
     mobileReachValue.textContent = `${summary.reachableStations} / ${summary.totalStations}`;
-    mobileReachMeta.textContent = `${percent}% of stations are reachable within ${REACHABILITY_THRESHOLD_MINUTES} minutes.`;
+    mobileReachMeta.textContent = `${percent}% of stations are reachable within ${summaryMinutes} minutes.`;
+  }
+}
+
+// Surfaces *why* a transit-mode reach number looks the way it does: sparse
+// lines (Metra especially) spend most of a rider's time budget waiting for
+// the next departure, not riding. Picks the most frequent currently-enabled
+// route serving the nearest seed station, since that's the realistic "best
+// bet" a rider would actually take from here.
+function describeStationFrequency(stationIndex) {
+  if (stationIndex == null || !state.data) return null;
+  const routeStateIndexes = state.data.stationStates?.[stationIndex] || [];
+  let best = null;
+  for (const routeStateIndex of routeStateIndexes) {
+    if (!isRouteStateEnabled(routeStateIndex)) continue;
+    const routeId = state.data.routeStates[routeStateIndex].routeId;
+    const wait = state.data.routeWaits?.[routeId];
+    if (wait == null) continue;
+    if (!best || wait < best.wait) {
+      const style = state.data.routeStyles?.[routeId];
+      best = { wait, label: style?.label || routeId, agency: style?.agency || "" };
+    }
+  }
+  if (!best) return null;
+  const headwayMinutes = Math.round(best.wait * 2);
+  const agencyPart = best.agency ? `${best.agency} ` : "";
+  return `${agencyPart}${best.label} · every ~${headwayMinutes} min`;
+}
+
+function syncOriginFrequencyNote(stationIndex) {
+  const text = hasActiveTransitMode() ? describeStationFrequency(stationIndex) : null;
+  for (const el of [originFrequencyNote, mobileOriginFrequencyNote]) {
+    if (!el) continue;
+    if (text) {
+      el.textContent = text;
+      el.hidden = false;
+    } else {
+      el.hidden = true;
+      el.textContent = "";
+    }
   }
 }
 
@@ -2642,6 +2703,7 @@ function drawMap(drawCtx, width, height) {
       projectPoint,
     };
     syncReachabilityScore();
+    syncOriginFrequencyNote(null);
     syncMobileSheet();
     return;
   }
@@ -2786,6 +2848,7 @@ function drawMap(drawCtx, width, height) {
           ? "Warped commute-time view"
           : "Geographic commute-time view";
   }
+  syncOriginFrequencyNote(nearest?.index ?? null);
   syncMobileSheet();
 }
 
@@ -3005,9 +3068,10 @@ function exportShareImage() {
     exportCtx.lineWidth = 1.5;
     exportCtx.stroke();
 
+    const badgeMinutes = Math.round(reachability.threshold ?? currentTravelSettings().maxTransitTime);
     exportCtx.fillStyle = "#5f6f7f";
     exportCtx.font = '700 17px "Avenir Next", "Helvetica Neue", Helvetica, sans-serif';
-    exportCtx.fillText("60-MINUTE REACH", badgeX + 20, badgeY + 26);
+    exportCtx.fillText(`${badgeMinutes}-MINUTE REACH`, badgeX + 20, badgeY + 26);
 
     exportCtx.fillStyle = "#17304d";
     exportCtx.font = '700 42px "Avenir Next", "Helvetica Neue", Helvetica, sans-serif';
@@ -3377,6 +3441,7 @@ function handleMobilePointerUp(event) {
     }
     state.dirty = true;
     syncMobileSheet();
+    syncFavoritesUi();
     requestDraw();
   }
 
@@ -3455,6 +3520,7 @@ function handleDesktopPointerUp(event) {
     }
     state.dirty = true;
     syncMobileSheet();
+    syncFavoritesUi();
     requestDraw();
   }
 
@@ -3515,6 +3581,7 @@ function setPinnedOrigin(worldPoint) {
   syncBrowserUrl();
   state.dirty = true;
   syncMobileSheet();
+  syncFavoritesUi();
   requestDraw();
 }
 
@@ -3530,7 +3597,106 @@ function clearPinnedOrigin() {
   syncBrowserUrl();
   state.dirty = true;
   syncMobileSheet();
+  syncFavoritesUi();
   requestDraw();
+}
+
+function loadFavorites() {
+  try {
+    const raw = window.localStorage.getItem(FAVORITES_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (entry) =>
+        entry &&
+        typeof entry.id === "string" &&
+        typeof entry.label === "string" &&
+        Number.isFinite(entry.lon) &&
+        Number.isFinite(entry.lat),
+    );
+  } catch (error) {
+    return [];
+  }
+}
+
+function saveFavorites(favorites) {
+  try {
+    window.localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(favorites));
+  } catch (error) {
+    // localStorage unavailable (private browsing, quota) -- favorites just won't persist.
+  }
+}
+
+function addFavorite(label, lon, lat) {
+  const favorites = loadFavorites();
+  const entry = { id: `fav-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, label, lon, lat };
+  favorites.unshift(entry);
+  saveFavorites(favorites.slice(0, MAX_FAVORITES));
+  syncFavoritesUi();
+}
+
+function removeFavorite(id) {
+  const favorites = loadFavorites().filter((entry) => entry.id !== id);
+  saveFavorites(favorites);
+  syncFavoritesUi();
+}
+
+function currentOriginLabelForFavorite() {
+  if (state.originLabel) return state.originLabel;
+  const nearestSeed = state.currentRender?.warp?.seeds?.[0] ?? null;
+  const nearestStation = nearestSeed ? state.data?.stations?.[nearestSeed.index] : null;
+  if (nearestStation) return `Near ${nearestStation.name}`;
+  return "Pinned origin";
+}
+
+function syncFavoritesUi() {
+  const favorites = loadFavorites();
+  for (const ui of favoritesUis) {
+    if (!ui.saveButton || !ui.list) continue;
+    ui.saveButton.disabled = !state.pinned || !state.originPoint;
+    ui.list.innerHTML = "";
+    if (ui.empty) {
+      ui.empty.hidden = favorites.length > 0;
+      ui.list.appendChild(ui.empty);
+    }
+    for (const favorite of favorites) {
+      const chip = document.createElement("span");
+      chip.className = "favorite-chip";
+
+      const nameButton = document.createElement("button");
+      nameButton.type = "button";
+      nameButton.className = "favorite-chip-name";
+      nameButton.textContent = favorite.label;
+      nameButton.title = `Pin origin to ${favorite.label}`;
+      nameButton.addEventListener("click", () => {
+        const worldPoint = lonLatToWorld(favorite.lon, favorite.lat);
+        if (!withinBounds(worldPoint)) return;
+        state.originLabel = favorite.label;
+        setAddressInputs(favorite.label);
+        setPinnedOrigin(worldPoint);
+      });
+
+      const removeButton = document.createElement("button");
+      removeButton.type = "button";
+      removeButton.className = "favorite-chip-remove";
+      removeButton.textContent = "×";
+      removeButton.setAttribute("aria-label", `Remove favorite ${favorite.label}`);
+      removeButton.addEventListener("click", () => removeFavorite(favorite.id));
+
+      chip.appendChild(nameButton);
+      chip.appendChild(removeButton);
+      ui.list.appendChild(chip);
+    }
+  }
+}
+
+function handleSaveFavoriteClick() {
+  if (!state.pinned || !state.originPoint) return;
+  const suggested = currentOriginLabelForFavorite();
+  const label = window.prompt("Name this favorite:", suggested);
+  if (!label) return;
+  const { lon, lat } = worldToLonLat(state.originPoint);
+  addFavorite(label.trim().slice(0, 60) || suggested, lon, lat);
 }
 
 function syncMobileSheet() {
@@ -4057,6 +4223,10 @@ async function init() {
     clearPinnedOrigin();
     setSearchMetaText("Origin cleared. Tap the map or search for a new starting point.");
   });
+
+  if (saveFavoriteButton) saveFavoriteButton.addEventListener("click", handleSaveFavoriteClick);
+  if (mobileSaveFavoriteButton) mobileSaveFavoriteButton.addEventListener("click", handleSaveFavoriteClick);
+  syncFavoritesUi();
 
   mobileLocateButton.addEventListener("click", () => {
     collapseMobileHelp();
