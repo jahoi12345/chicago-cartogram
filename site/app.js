@@ -3559,7 +3559,7 @@ function syncMobileSheet() {
 function renderSearchResults(results) {
   clearSearchResults();
   if (!results.length) {
-    setSearchMetaText("No Chicago address matches found.");
+    setSearchMetaText("No Chicago-area address matches found.");
     return;
   }
   setSearchMetaText("Choose a result to pin the origin there.");
@@ -3602,13 +3602,21 @@ function lonLatToWorld(lon, lat) {
 
 async function searchAddress(query) {
   const params = new URLSearchParams({
-    q: `${query}, Chicago, IL`,
+    q: query,
     format: "jsonv2",
     addressdetails: "1",
     countrycodes: "us",
     limit: "5",
     bounded: "1",
-    viewbox: "-88.10,42.15,-87.45,41.55",
+    // Matches the actual modeled region (state.data.meta.bounds converted back
+    // to lon/lat), not just Chicago proper -- the old box (roughly the city
+    // limits) silently dropped results for anywhere the transit network
+    // actually reaches: Evanston and points further up the North Shore, the
+    // far west suburbs, the far south suburbs. Also, the query text used to
+    // have ", Chicago, IL" appended unconditionally, which broke suburb
+    // searches outright (e.g. "..., Evanston, IL, Chicago, IL" matches
+    // nothing) -- the viewbox alone is enough to keep results regional.
+    viewbox: "-88.70,42.65,-87.45,41.35",
   });
   const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
     headers: {
@@ -4024,13 +4032,13 @@ async function init() {
       event.preventDefault();
       const query = ui.input.value.trim();
       if (!query) {
-        setSearchMetaText("Enter a Chicago address to search.");
+        setSearchMetaText("Enter a Chicago-area address to search.");
         clearSearchResults();
         return;
       }
 
       setSearchBusy(true);
-      setSearchMetaText("Looking up Chicago address matches…");
+      setSearchMetaText("Looking up Chicago-area address matches…");
       clearSearchResults();
 
       try {
@@ -4038,7 +4046,7 @@ async function init() {
         renderSearchResults(results);
       } catch (error) {
         console.error(error);
-        setSearchMetaText("Address lookup failed. Try a more specific Chicago address.");
+        setSearchMetaText("Address lookup failed. Try a more specific Chicago-area address.");
       } finally {
         setSearchBusy(false);
       }
