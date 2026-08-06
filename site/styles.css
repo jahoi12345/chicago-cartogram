@@ -262,6 +262,25 @@ body {
   white-space: nowrap;
 }
 
+.toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.toggle-text .toggle-label {
+  white-space: normal;
+}
+
+.toggle-description {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0;
+  line-height: 1.3;
+}
+
 .settings-menu {
   position: relative;
   z-index: 6;
@@ -326,6 +345,10 @@ body {
   margin-bottom: 12px;
 }
 
+.settings-section {
+  margin-bottom: 16px;
+}
+
 .settings-section-label {
   margin: 2px 0 8px;
   color: var(--muted);
@@ -335,8 +358,26 @@ body {
   text-transform: uppercase;
 }
 
-.travel-mode-toggle-group {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+.settings-subsection + .settings-subsection {
+  margin-top: 10px;
+}
+
+.settings-subsection-label {
+  margin: 0 0 6px;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 0.76rem;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.settings-subsection-hint {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 .settings-toggle-control {
@@ -1298,10 +1339,6 @@ canvas {
     background: rgba(23, 48, 77, 0.06);
     font-size: 0.86rem;
   }
-
-.mobile-settings-toggle-group.travel-mode-toggle-group {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
 
   .mobile-settings-menu {
     width: 100%;

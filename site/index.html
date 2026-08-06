@@ -93,66 +93,103 @@
                   <span>Settings</span>
                 </summary>
                 <div class="settings-card">
-                  <div class="settings-toggle-group">
-                    <label class="toggle-control settings-toggle-control" for="warpToggle">
-                      <input id="warpToggle" type="checkbox" />
-                      <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                      <span class="toggle-label">warp</span>
-                    </label>
-                    <label class="toggle-control settings-toggle-control" for="heatmapToggle">
-                      <input id="heatmapToggle" type="checkbox" />
-                      <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                      <span class="toggle-label">heatmap</span>
-                    </label>
-                    <label class="toggle-control settings-toggle-control" for="outlineToggle">
-                      <input id="outlineToggle" type="checkbox" />
-                      <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                      <span class="toggle-label">outline</span>
-                    </label>
+                  <div class="settings-section">
+                    <p class="settings-section-label">Map display</p>
+                    <div class="settings-toggle-group">
+                      <label class="toggle-control settings-toggle-control" for="warpToggle">
+                        <input id="warpToggle" type="checkbox" />
+                        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                        <span class="toggle-text">
+                          <span class="toggle-label">Warp</span>
+                          <span class="toggle-description">Stretch the map by travel time</span>
+                        </span>
+                      </label>
+                      <label class="toggle-control settings-toggle-control" for="heatmapToggle">
+                        <input id="heatmapToggle" type="checkbox" />
+                        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                        <span class="toggle-text">
+                          <span class="toggle-label">Heatmap</span>
+                          <span class="toggle-description">Color the map by travel time</span>
+                        </span>
+                      </label>
+                      <label class="toggle-control settings-toggle-control" for="outlineToggle">
+                        <input id="outlineToggle" type="checkbox" />
+                        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                        <span class="toggle-text">
+                          <span class="toggle-label">Outline</span>
+                          <span class="toggle-description">Ring your reachable area</span>
+                        </span>
+                      </label>
+                    </div>
                   </div>
-                  <p class="settings-section-label">Travel options</p>
-                  <div class="settings-toggle-group travel-mode-toggle-group">
-                    <label class="toggle-control settings-toggle-control" for="subwayModeToggle">
-                      <input id="subwayModeToggle" type="checkbox" data-mode-toggle="subway" />
-                      <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                      <span class="toggle-label">Subway (CTA)</span>
-                    </label>
-                    <label class="toggle-control settings-toggle-control" for="metraModeToggle">
-                      <input id="metraModeToggle" type="checkbox" data-mode-toggle="metra" />
-                      <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                      <span class="toggle-label">Metra</span>
-                    </label>
-                    <label class="toggle-control settings-toggle-control" for="driveModeToggle">
-                      <input id="driveModeToggle" type="checkbox" data-mode-toggle="drive" />
-                      <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                      <span class="toggle-label">Drive</span>
-                    </label>
-                    <label class="toggle-control settings-toggle-control" for="busModeToggle">
-                      <input id="busModeToggle" type="checkbox" data-mode-toggle="bus" />
-                      <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                      <span class="toggle-label">Bus / Pace</span>
-                    </label>
-                    <label class="toggle-control settings-toggle-control" for="bikeModeToggle">
-                      <input id="bikeModeToggle" type="checkbox" data-mode-toggle="bike" />
-                      <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                      <span class="toggle-label">Bike</span>
-                    </label>
-                    <label class="toggle-control settings-toggle-control" for="walkModeToggle">
-                      <input id="walkModeToggle" type="checkbox" data-mode-toggle="walk" />
-                      <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                      <span class="toggle-label">Walk</span>
-                    </label>
-                  </div>
-                  <div class="settings-grid">
-                    <label class="settings-field">
-                      <span class="settings-field-head">
-                        <span>Maximum transit time</span>
-                        <strong data-setting-value="maxTransitTime">60 min</strong>
-                      </span>
-                      <div class="settings-input-row">
-                        <input data-setting-key="maxTransitTime" data-setting-unit="minutes" type="range" min="30" max="120" step="5" />
+                  <div class="settings-section">
+                    <p class="settings-section-label">Travel modes</p>
+                    <div class="settings-subsection">
+                      <p class="settings-subsection-label">Transit</p>
+                      <div class="settings-toggle-group travel-mode-toggle-group">
+                        <label class="toggle-control settings-toggle-control" for="subwayModeToggle">
+                          <input id="subwayModeToggle" type="checkbox" data-mode-toggle="subway" />
+                          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                          <span class="toggle-text">
+                            <span class="toggle-label">Subway (CTA)</span>
+                            <span class="toggle-description">CTA "L" trains</span>
+                          </span>
+                        </label>
+                        <label class="toggle-control settings-toggle-control" for="metraModeToggle">
+                          <input id="metraModeToggle" type="checkbox" data-mode-toggle="metra" />
+                          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                          <span class="toggle-text">
+                            <span class="toggle-label">Metra</span>
+                            <span class="toggle-description">Regional commuter rail</span>
+                          </span>
+                        </label>
+                        <label class="toggle-control settings-toggle-control" for="busModeToggle">
+                          <input id="busModeToggle" type="checkbox" data-mode-toggle="bus" />
+                          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                          <span class="toggle-text">
+                            <span class="toggle-label">Bus / Pace</span>
+                            <span class="toggle-description">CTA and Pace buses</span>
+                          </span>
+                        </label>
                       </div>
-                    </label>
+                    </div>
+                    <div class="settings-subsection">
+                      <p class="settings-subsection-label">
+                        Direct
+                        <span class="settings-subsection-hint">straight-line estimate, not routed</span>
+                      </p>
+                      <div class="settings-toggle-group travel-mode-toggle-group">
+                        <label class="toggle-control settings-toggle-control" for="driveModeToggle">
+                          <input id="driveModeToggle" type="checkbox" data-mode-toggle="drive" />
+                          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                          <span class="toggle-label">Drive</span>
+                        </label>
+                        <label class="toggle-control settings-toggle-control" for="bikeModeToggle">
+                          <input id="bikeModeToggle" type="checkbox" data-mode-toggle="bike" />
+                          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                          <span class="toggle-label">Bike</span>
+                        </label>
+                        <label class="toggle-control settings-toggle-control" for="walkModeToggle">
+                          <input id="walkModeToggle" type="checkbox" data-mode-toggle="walk" />
+                          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                          <span class="toggle-label">Walk</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="settings-section">
+                    <p class="settings-section-label">Time budget</p>
+                    <div class="settings-grid">
+                      <label class="settings-field">
+                        <span class="settings-field-head">
+                          <span>Maximum transit time</span>
+                          <strong data-setting-value="maxTransitTime">60 min</strong>
+                        </span>
+                        <div class="settings-input-row">
+                          <input data-setting-key="maxTransitTime" data-setting-unit="minutes" type="range" min="30" max="120" step="5" />
+                        </div>
+                      </label>
+                    </div>
                   </div>
                   <div class="settings-actions">
                     <button class="settings-reset-button" type="button" data-settings-reset>
@@ -333,66 +370,103 @@
                   <span>Settings</span>
                 </summary>
                 <div class="settings-card">
-                  <div class="settings-toggle-group mobile-settings-toggle-group">
-                    <label class="toggle-control mobile-toggle-control settings-toggle-control" for="mobileWarpToggle">
-                      <input id="mobileWarpToggle" type="checkbox" />
-                      <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                      <span class="toggle-label">warp</span>
-                    </label>
-                    <label class="toggle-control mobile-toggle-control settings-toggle-control" for="mobileHeatmapToggle">
-                      <input id="mobileHeatmapToggle" type="checkbox" />
-                      <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                      <span class="toggle-label">heatmap</span>
-                    </label>
-                    <label class="toggle-control mobile-toggle-control settings-toggle-control" for="mobileOutlineToggle">
-                      <input id="mobileOutlineToggle" type="checkbox" />
-                      <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                      <span class="toggle-label">outline</span>
-                    </label>
+                  <div class="settings-section">
+                    <p class="settings-section-label">Map display</p>
+                    <div class="settings-toggle-group mobile-settings-toggle-group">
+                      <label class="toggle-control mobile-toggle-control settings-toggle-control" for="mobileWarpToggle">
+                        <input id="mobileWarpToggle" type="checkbox" />
+                        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                        <span class="toggle-text">
+                          <span class="toggle-label">Warp</span>
+                          <span class="toggle-description">Stretch the map by travel time</span>
+                        </span>
+                      </label>
+                      <label class="toggle-control mobile-toggle-control settings-toggle-control" for="mobileHeatmapToggle">
+                        <input id="mobileHeatmapToggle" type="checkbox" />
+                        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                        <span class="toggle-text">
+                          <span class="toggle-label">Heatmap</span>
+                          <span class="toggle-description">Color the map by travel time</span>
+                        </span>
+                      </label>
+                      <label class="toggle-control mobile-toggle-control settings-toggle-control" for="mobileOutlineToggle">
+                        <input id="mobileOutlineToggle" type="checkbox" />
+                        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                        <span class="toggle-text">
+                          <span class="toggle-label">Outline</span>
+                          <span class="toggle-description">Ring your reachable area</span>
+                        </span>
+                      </label>
+                    </div>
                   </div>
-                  <p class="settings-section-label">Travel options</p>
-                  <div class="settings-toggle-group mobile-settings-toggle-group travel-mode-toggle-group">
-                    <label class="toggle-control mobile-toggle-control settings-toggle-control" for="mobileSubwayModeToggle">
-                      <input id="mobileSubwayModeToggle" type="checkbox" data-mode-toggle="subway" />
-                      <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                      <span class="toggle-label">Subway (CTA)</span>
-                    </label>
-                    <label class="toggle-control mobile-toggle-control settings-toggle-control" for="mobileMetraModeToggle">
-                      <input id="mobileMetraModeToggle" type="checkbox" data-mode-toggle="metra" />
-                      <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                      <span class="toggle-label">Metra</span>
-                    </label>
-                    <label class="toggle-control mobile-toggle-control settings-toggle-control" for="mobileDriveModeToggle">
-                      <input id="mobileDriveModeToggle" type="checkbox" data-mode-toggle="drive" />
-                      <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                      <span class="toggle-label">Drive</span>
-                    </label>
-                    <label class="toggle-control mobile-toggle-control settings-toggle-control" for="mobileBusModeToggle">
-                      <input id="mobileBusModeToggle" type="checkbox" data-mode-toggle="bus" />
-                      <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                      <span class="toggle-label">Bus / Pace</span>
-                    </label>
-                    <label class="toggle-control mobile-toggle-control settings-toggle-control" for="mobileBikeModeToggle">
-                      <input id="mobileBikeModeToggle" type="checkbox" data-mode-toggle="bike" />
-                      <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                      <span class="toggle-label">Bike</span>
-                    </label>
-                    <label class="toggle-control mobile-toggle-control settings-toggle-control" for="mobileWalkModeToggle">
-                      <input id="mobileWalkModeToggle" type="checkbox" data-mode-toggle="walk" />
-                      <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                      <span class="toggle-label">Walk</span>
-                    </label>
-                  </div>
-                  <div class="settings-grid">
-                    <label class="settings-field">
-                      <span class="settings-field-head">
-                        <span>Maximum transit time</span>
-                        <strong data-setting-value="maxTransitTime">60 min</strong>
-                      </span>
-                      <div class="settings-input-row">
-                        <input data-setting-key="maxTransitTime" data-setting-unit="minutes" type="range" min="30" max="120" step="5" />
+                  <div class="settings-section">
+                    <p class="settings-section-label">Travel modes</p>
+                    <div class="settings-subsection">
+                      <p class="settings-subsection-label">Transit</p>
+                      <div class="settings-toggle-group mobile-settings-toggle-group travel-mode-toggle-group">
+                        <label class="toggle-control mobile-toggle-control settings-toggle-control" for="mobileSubwayModeToggle">
+                          <input id="mobileSubwayModeToggle" type="checkbox" data-mode-toggle="subway" />
+                          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                          <span class="toggle-text">
+                            <span class="toggle-label">Subway (CTA)</span>
+                            <span class="toggle-description">CTA "L" trains</span>
+                          </span>
+                        </label>
+                        <label class="toggle-control mobile-toggle-control settings-toggle-control" for="mobileMetraModeToggle">
+                          <input id="mobileMetraModeToggle" type="checkbox" data-mode-toggle="metra" />
+                          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                          <span class="toggle-text">
+                            <span class="toggle-label">Metra</span>
+                            <span class="toggle-description">Regional commuter rail</span>
+                          </span>
+                        </label>
+                        <label class="toggle-control mobile-toggle-control settings-toggle-control" for="mobileBusModeToggle">
+                          <input id="mobileBusModeToggle" type="checkbox" data-mode-toggle="bus" />
+                          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                          <span class="toggle-text">
+                            <span class="toggle-label">Bus / Pace</span>
+                            <span class="toggle-description">CTA and Pace buses</span>
+                          </span>
+                        </label>
                       </div>
-                    </label>
+                    </div>
+                    <div class="settings-subsection">
+                      <p class="settings-subsection-label">
+                        Direct
+                        <span class="settings-subsection-hint">straight-line estimate, not routed</span>
+                      </p>
+                      <div class="settings-toggle-group mobile-settings-toggle-group travel-mode-toggle-group">
+                        <label class="toggle-control mobile-toggle-control settings-toggle-control" for="mobileDriveModeToggle">
+                          <input id="mobileDriveModeToggle" type="checkbox" data-mode-toggle="drive" />
+                          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                          <span class="toggle-label">Drive</span>
+                        </label>
+                        <label class="toggle-control mobile-toggle-control settings-toggle-control" for="mobileBikeModeToggle">
+                          <input id="mobileBikeModeToggle" type="checkbox" data-mode-toggle="bike" />
+                          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                          <span class="toggle-label">Bike</span>
+                        </label>
+                        <label class="toggle-control mobile-toggle-control settings-toggle-control" for="mobileWalkModeToggle">
+                          <input id="mobileWalkModeToggle" type="checkbox" data-mode-toggle="walk" />
+                          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                          <span class="toggle-label">Walk</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="settings-section">
+                    <p class="settings-section-label">Time budget</p>
+                    <div class="settings-grid">
+                      <label class="settings-field">
+                        <span class="settings-field-head">
+                          <span>Maximum transit time</span>
+                          <strong data-setting-value="maxTransitTime">60 min</strong>
+                        </span>
+                        <div class="settings-input-row">
+                          <input data-setting-key="maxTransitTime" data-setting-unit="minutes" type="range" min="30" max="120" step="5" />
+                        </div>
+                      </label>
+                    </div>
                   </div>
                   <div class="settings-actions">
                     <button class="settings-reset-button" type="button" data-settings-reset>
