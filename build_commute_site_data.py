@@ -77,6 +77,14 @@ INTER_COMPLEX_WALK_PENALTY = 2.0
 DEFAULT_BOARD_WAIT = 4.0
 TRANSFER_PENALTY = 4.0
 INTER_COMPLEX_TRANSFER_PENALTY = 7.0
+# Chicago's Metra lines don't share downtown terminals the way CTA lines share
+# dense stop spacing: Union Station, LaSalle Street Station, and Millennium
+# Station are each a several-block walk apart (600-1450m), well outside
+# INTER_COMPLEX_WALK_RADIUS. Without a wider transfer radius scoped to Metra
+# stations, those three station complexes -- and therefore all ten Metra
+# lines -- have zero graph connectivity to each other, even though riders
+# routinely make these downtown transfers on foot.
+METRA_HUB_WALK_RADIUS = 1600.0
 
 Point = Tuple[float, float]
 Ring = List[Point]
@@ -1199,6 +1207,44 @@ def build_multimodal_graph(
             walk_minutes = distance_m / WALK_METERS_PER_MINUTE + INTER_COMPLEX_WALK_PENALTY
             for from_state in station_states[i]:
                 for to_state in station_states[j]:
+                    to_route = route_states[to_state]["routeId"]
+                    from_route = route_states[from_state]["routeId"]
+                    forward_cost = round(
+                        walk_minutes + INTER_COMPLEX_TRANSFER_PENALTY + route_waits.get(to_route, DEFAULT_BOARD_WAIT),
+                        2,
+                    )
+                    backward_cost = round(
+                        walk_minutes + INTER_COMPLEX_TRANSFER_PENALTY + route_waits.get(from_route, DEFAULT_BOARD_WAIT),
+                        2,
+                    )
+                    existing_forward = adjacency[from_state].get(to_state)
+                    existing_backward = adjacency[to_state].get(from_state)
+                    if existing_forward is None or forward_cost < existing_forward:
+                        adjacency[from_state][to_state] = forward_cost
+                    if existing_backward is None or backward_cost < existing_backward:
+                        adjacency[to_state][from_state] = backward_cost
+
+    metra_station_indices = [
+        i
+        for i, state_indexes in enumerate(station_states)
+        if any(route_states[state]["routeId"].startswith("metra:") for state in state_indexes)
+    ]
+    metra_points = [stations[i]["point"] for i in metra_station_indices]
+    metra_bins = build_spatial_bins(metra_points, METRA_HUB_WALK_RADIUS)
+    for a, i in enumerate(metra_station_indices):
+        source_point = metra_points[a]
+        for b in nearby_point_indexes(source_point, metra_points, metra_bins, METRA_HUB_WALK_RADIUS, METRA_HUB_WALK_RADIUS):
+            j = metra_station_indices[b]
+            if j <= i:
+                continue
+            distance_m = math.hypot(stations[j]["point"][0] - source_point[0], stations[j]["point"][1] - source_point[1])
+            if distance_m <= INTER_COMPLEX_WALK_RADIUS:
+                continue  # already bridged by the general pass above
+            walk_minutes = distance_m / WALK_METERS_PER_MINUTE + INTER_COMPLEX_WALK_PENALTY
+            metra_from_states = [s for s in station_states[i] if route_states[s]["routeId"].startswith("metra:")]
+            metra_to_states = [s for s in station_states[j] if route_states[s]["routeId"].startswith("metra:")]
+            for from_state in metra_from_states:
+                for to_state in metra_to_states:
                     to_route = route_states[to_state]["routeId"]
                     from_route = route_states[from_state]["routeId"]
                     forward_cost = round(
