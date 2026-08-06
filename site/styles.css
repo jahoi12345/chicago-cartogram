@@ -494,6 +494,109 @@ body {
   box-shadow: 0 4px 12px rgba(23, 48, 77, 0.2);
 }
 
+.time-budget-scrubber {
+  display: grid;
+  gap: 8px;
+  padding: 14px 18px 16px;
+  margin-top: 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(23, 48, 77, 0.1);
+  background: rgba(255, 252, 247, 0.85);
+}
+
+.time-budget-scrubber-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.time-budget-scrubber-head strong {
+  color: var(--accent);
+  font-size: 0.95rem;
+  letter-spacing: 0.01em;
+}
+
+.time-budget-scrubber-input {
+  width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
+  height: 28px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.time-budget-scrubber-input:focus {
+  outline: none;
+}
+
+.time-budget-scrubber-input::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(215, 92, 46, 0.9), rgba(242, 200, 167, 0.95));
+}
+
+.time-budget-scrubber-input::-moz-range-track {
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(215, 92, 46, 0.9), rgba(242, 200, 167, 0.95));
+}
+
+.time-budget-scrubber-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 22px;
+  height: 22px;
+  margin-top: -7px;
+  border-radius: 50%;
+  border: 2px solid #fff8ef;
+  background: var(--ink);
+  box-shadow: 0 4px 12px rgba(23, 48, 77, 0.2);
+}
+
+.time-budget-scrubber-input::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid #fff8ef;
+  background: var(--ink);
+  box-shadow: 0 4px 12px rgba(23, 48, 77, 0.2);
+}
+
+.time-budget-scrubber-presets {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.time-budget-preset {
+  flex: 1;
+  border: 1px solid rgba(23, 48, 77, 0.1);
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 4px 0;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.time-budget-preset:hover {
+  border-color: rgba(215, 92, 46, 0.35);
+  color: var(--accent);
+}
+
+.time-budget-preset.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff8ef;
+}
+
 .settings-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1407,6 +1510,11 @@ canvas {
     font-size: 0.84rem;
     line-height: 1.45;
     color: var(--muted);
+  }
+
+  .mobile-sheet-body .time-budget-scrubber {
+    margin: 0;
+    padding: 12px 14px 14px;
   }
 
   .mobile-sheet-stats {

@@ -221,6 +221,7 @@ const mobileInstructionsLocateButton = document.getElementById("mobileInstructio
 const mobileHelpBubble = document.getElementById("mobileHelpBubble");
 const settingsInputs = Array.from(document.querySelectorAll("[data-setting-key]"));
 const settingsValueLabels = Array.from(document.querySelectorAll("[data-setting-value]"));
+const timeBudgetPresetButtons = Array.from(document.querySelectorAll("[data-preset-minutes]"));
 const settingsResetButtons = Array.from(document.querySelectorAll("[data-settings-reset]"));
 const settingsSaveButtons = Array.from(document.querySelectorAll("[data-settings-save]"));
 const settingsMenus = Array.from(document.querySelectorAll(".settings-menu"));
@@ -319,7 +320,7 @@ function sanitizeTravelSettings(rawSettings, defaults = state.travelSettingsDefa
     ),
     maxTransitTime: clamp(
       Number.isFinite(raw.maxTransitTime) ? raw.maxTransitTime : defaults.maxTransitTime,
-      30,
+      15,
       120,
     ),
   };
@@ -687,6 +688,9 @@ function syncTravelSettingsInputs() {
     const key = label.dataset.settingValue;
     if (!key || !(key in settings)) continue;
     label.textContent = formatSettingLabel(key, Number(settingToInputValue(key, settings[key])));
+  }
+  for (const button of timeBudgetPresetButtons) {
+    button.classList.toggle("is-active", Number(button.dataset.presetMinutes) === Math.round(settings.maxTransitTime));
   }
 }
 
@@ -3965,6 +3969,14 @@ async function init() {
   for (const button of settingsResetButtons) {
     button.addEventListener("click", () => {
       applyTravelSettings(state.travelSettingsDefaults);
+    });
+  }
+
+  for (const button of timeBudgetPresetButtons) {
+    button.addEventListener("click", () => {
+      const minutes = Number(button.dataset.presetMinutes);
+      if (!Number.isFinite(minutes)) return;
+      applyTravelSettings({ ...currentTravelSettings(), maxTransitTime: minutes });
     });
   }
 

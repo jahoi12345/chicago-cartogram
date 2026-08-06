@@ -198,7 +198,7 @@
                           <strong data-setting-value="maxTransitTime">60 min</strong>
                         </span>
                         <div class="settings-input-row">
-                          <input data-setting-key="maxTransitTime" data-setting-unit="minutes" type="range" min="30" max="120" step="5" />
+                          <input data-setting-key="maxTransitTime" data-setting-unit="minutes" type="range" min="15" max="120" step="5" value="60" />
                         </div>
                       </label>
                     </div>
@@ -213,6 +213,39 @@
                   </div>
                 </div>
               </details>
+            </div>
+          </div>
+          <div class="time-budget-scrubber">
+            <div class="time-budget-scrubber-head">
+              <span class="time-budget-scrubber-label">Time budget</span>
+              <strong data-setting-value="maxTransitTime" class="time-budget-scrubber-value">60 min</strong>
+            </div>
+            <input
+              id="isochroneSlider"
+              class="time-budget-scrubber-input"
+              type="range"
+              min="15"
+              max="120"
+              step="5"
+              value="60"
+              list="isochronePresets"
+              data-setting-key="maxTransitTime"
+              data-setting-unit="minutes"
+              aria-label="Isochrone time budget in minutes"
+            />
+            <datalist id="isochronePresets">
+              <option value="15"></option>
+              <option value="30"></option>
+              <option value="45"></option>
+              <option value="60"></option>
+              <option value="90"></option>
+            </datalist>
+            <div class="time-budget-scrubber-presets">
+              <button type="button" class="time-budget-preset" data-preset-minutes="15">15</button>
+              <button type="button" class="time-budget-preset" data-preset-minutes="30">30</button>
+              <button type="button" class="time-budget-preset" data-preset-minutes="45">45</button>
+              <button type="button" class="time-budget-preset" data-preset-minutes="60">60</button>
+              <button type="button" class="time-budget-preset" data-preset-minutes="90">90</button>
             </div>
           </div>
           <div class="map-frame">
@@ -366,6 +399,31 @@
                   Clear
                 </button>
               </div>
+              <div class="time-budget-scrubber">
+                <div class="time-budget-scrubber-head">
+                  <span class="time-budget-scrubber-label">Time budget</span>
+                  <strong data-setting-value="maxTransitTime" class="time-budget-scrubber-value">60 min</strong>
+                </div>
+                <input
+                  id="mobileIsochroneSlider"
+                  class="time-budget-scrubber-input"
+                  type="range"
+                  min="15"
+                  max="120"
+                  step="5"
+                  list="isochronePresets"
+                  data-setting-key="maxTransitTime"
+                  data-setting-unit="minutes"
+                  aria-label="Isochrone time budget in minutes"
+                />
+                <div class="time-budget-scrubber-presets">
+                  <button type="button" class="time-budget-preset" data-preset-minutes="15">15</button>
+                  <button type="button" class="time-budget-preset" data-preset-minutes="30">30</button>
+                  <button type="button" class="time-budget-preset" data-preset-minutes="45">45</button>
+                  <button type="button" class="time-budget-preset" data-preset-minutes="60">60</button>
+                  <button type="button" class="time-budget-preset" data-preset-minutes="90">90</button>
+                </div>
+              </div>
               <div class="mobile-sheet-stats">
                 <div class="mobile-sheet-stat">
                   <span class="mobile-sheet-stat-label" data-reach-score-label>60-Minute Reach</span>
@@ -476,7 +534,7 @@
                           <strong data-setting-value="maxTransitTime">60 min</strong>
                         </span>
                         <div class="settings-input-row">
-                          <input data-setting-key="maxTransitTime" data-setting-unit="minutes" type="range" min="30" max="120" step="5" />
+                          <input data-setting-key="maxTransitTime" data-setting-unit="minutes" type="range" min="15" max="120" step="5" value="60" />
                         </div>
                       </label>
                     </div>
