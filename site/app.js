@@ -67,15 +67,33 @@ const DEFAULT_LAYER_VISIBILITY = {
   panelBackground: true,
 };
 const DIRECT_MODE_SPEEDS = {
-  drive: 18 * METERS_PER_MINUTE_PER_MPH,
   bike: 12 * METERS_PER_MINUTE_PER_MPH,
 };
 const DIRECT_MODE_DISTANCE_MULTIPLIERS = {
-  drive: 1.35,
+  drive: 1.3,
   bike: 1.18,
   walk: 1,
 };
 const DRIVE_ACCESS_PENALTY_MINUTES = 4;
+// A single flat driving speed badly understates how much highways change a
+// trip's average pace: two miles across a local grid and ten miles partly on
+// an expressway are not the same "mph." Modeled as a smooth ramp from a
+// congested-local-streets speed up toward a highway-influenced speed, keyed
+// off trip distance as a stand-in for "how much of this trip could plausibly
+// use an expressway" -- not real road data, but distance-aware instead of a
+// single constant. DRIVE_HIGHWAY_TRANSITION_METERS (~5 miles) is the
+// distance at which the ramp is about 63% of the way to the highway speed;
+// beyond ~12-15 miles it's effectively at the highway speed.
+const DRIVE_SPEED_LOCAL_MPH = 15;
+const DRIVE_SPEED_HIGHWAY_MPH = 45;
+const DRIVE_HIGHWAY_TRANSITION_METERS = 8000;
+
+function driveSpeedMetersPerMinute(distanceMeters) {
+  const local = DRIVE_SPEED_LOCAL_MPH * METERS_PER_MINUTE_PER_MPH;
+  const highway = DRIVE_SPEED_HIGHWAY_MPH * METERS_PER_MINUTE_PER_MPH;
+  const rampFraction = 1 - Math.exp(-distanceMeters / DRIVE_HIGHWAY_TRANSITION_METERS);
+  return local + (highway - local) * rampFraction;
+}
 // Fill in with your deployed routing-proxy Worker URL (see worker/index.js and
 // README) to have the pinned probe measurement follow real streets for
 // walk/bike/drive instead of the straight-line estimate above. Left blank,
@@ -155,6 +173,8 @@ const state = {
   routeStateEnabledCache: null,
   activeTransitStationCache: null,
   activeTransitStationEntryCache: null,
+  activeTransitStationByModeCache: null,
+  stationModeKeysCache: null,
   dynamicAdjacencyCache: null,
   drawFrameRequested: false,
   fullWarpSettleFrame: null,
@@ -514,6 +534,75 @@ function activeTransitStationEntries() {
   return entries;
 }
 
+// Which UI travel-mode key(s) (subway/metra/bus) a station serves. This is an
+// intrinsic property of the station -- it never changes as modes are
+// toggled -- so it's cached once per station index and reused forever,
+// unlike the mode-signature caches above.
+function stationModeKeys(stationIndex) {
+  if (!state.stationModeKeysCache) {
+    state.stationModeKeysCache = new Array(state.data.stations.length);
+  }
+  const cached = state.stationModeKeysCache[stationIndex];
+  if (cached) return cached;
+  const modes = new Set();
+  for (const routeStateIndex of state.data.stationStates[stationIndex] || []) {
+    const routeId = state.data.routeStates[routeStateIndex]?.routeId;
+    const style = routeId ? routeStyle(routeId) : null;
+    if (!style) continue;
+    if (style.mode === "rail") {
+      modes.add(style.agency === "CTA" ? "subway" : "metra");
+    } else if (style.mode === "commuter_rail") {
+      modes.add("metra");
+    } else if (style.mode === "bus") {
+      modes.add("bus");
+    }
+  }
+  state.stationModeKeysCache[stationIndex] = modes;
+  return modes;
+}
+
+// Active stations split out per mode, instead of pooled together. Pooling
+// them (the old activeTransitStationIndices()) is what let a dense mode
+// (bus stops every block or two) crowd a sparse one (rail stations a mile+
+// apart) out of "nearest N" cutoffs entirely: with bus enabled, the 5
+// physically-closest stations to almost any point in the city are all bus
+// stops, so a rail station a bit farther away -- possibly the one unlocking
+// the fastest trip -- would never even be considered. Keeping the pools
+// separate and taking each mode's own nearest N (see
+// nearestStationsAcrossActiveModes / buildCellAccessForActiveTransit) means
+// every active mode always gets a fair shot at being an entry point,
+// regardless of how dense the others are.
+function activeTransitStationIndicesByMode() {
+  const signature = activeModeSignature();
+  if (state.activeTransitStationByModeCache?.signature === signature) {
+    return state.activeTransitStationByModeCache.byMode;
+  }
+  const byMode = { subway: [], metra: [], bus: [] };
+  for (let index = 0; index < state.data.stations.length; index += 1) {
+    for (const mode of stationModeKeys(index)) {
+      if (state.activeModes[mode]) byMode[mode].push(index);
+    }
+  }
+  state.activeTransitStationByModeCache = { signature, byMode };
+  return byMode;
+}
+
+function nearestStationsAcrossActiveModes(point, countPerMode) {
+  const byMode = activeTransitStationIndicesByMode();
+  const merged = new Map();
+  for (const mode of ["subway", "metra", "bus"]) {
+    const indices = byMode[mode];
+    if (!indices.length) continue;
+    for (const entry of nearestStations(point, countPerMode, indices)) {
+      const existing = merged.get(entry.index);
+      if (!existing || entry.walkMinutes < existing.walkMinutes) {
+        merged.set(entry.index, entry);
+      }
+    }
+  }
+  return Array.from(merged.values()).sort((a, b) => a.walkMinutes - b.walkMinutes);
+}
+
 function insertNearestStationCandidate(nearest, candidate, limit) {
   let insertAt = nearest.length;
   while (insertAt > 0 && candidate.distanceMeters < nearest[insertAt - 1].distanceMeters) {
@@ -600,26 +689,37 @@ function stationsNearPoint(spatialIndex, point, minCount) {
 }
 
 function buildCellAccessForActiveTransit() {
-  const activeIndices = activeTransitStationIndices();
-  const spatialIndex = spatialIndexForStationList(activeIndices);
-  const accessByCellIndex = new Array(state.data.cells.length);
+  const byMode = activeTransitStationIndicesByMode();
   const nearestCount = state.data.meta.cellNearestStations;
+  // One spatial index per active mode, not one over the pooled stations --
+  // see the comment on activeTransitStationIndicesByMode() for why pooling
+  // lets a dense mode crowd a sparse one out of every cell's nearest-N.
+  const spatialIndexesByMode = ["subway", "metra", "bus"]
+    .map((mode) => byMode[mode])
+    .filter((indices) => indices.length)
+    .map((indices) => spatialIndexForStationList(indices));
+
+  const accessByCellIndex = new Array(state.data.cells.length);
 
   for (let cellIndex = 0; cellIndex < state.data.cells.length; cellIndex += 1) {
     const cell = state.data.cells[cellIndex];
-    const candidates = stationsNearPoint(spatialIndex, cell.point, nearestCount);
-    const nearest = [];
-    for (const stationIndex of candidates) {
-      insertNearestStationCandidate(
-        nearest,
-        {
-          stationIndex,
-          distanceMeters: distance(cell.point, state.data.stations[stationIndex].point),
-        },
-        nearestCount,
-      );
+    const combined = [];
+    for (const spatialIndex of spatialIndexesByMode) {
+      const candidates = stationsNearPoint(spatialIndex, cell.point, nearestCount);
+      const nearestForMode = [];
+      for (const stationIndex of candidates) {
+        insertNearestStationCandidate(
+          nearestForMode,
+          {
+            stationIndex,
+            distanceMeters: distance(cell.point, state.data.stations[stationIndex].point),
+          },
+          nearestCount,
+        );
+      }
+      combined.push(...nearestForMode);
     }
-    accessByCellIndex[cellIndex] = nearest.map(({ stationIndex }) => [stationIndex]);
+    accessByCellIndex[cellIndex] = combined.map(({ stationIndex }) => [stationIndex]);
   }
 
   return accessByCellIndex;
@@ -660,6 +760,7 @@ function setTravelMode(mode, enabled) {
   state.routeStateEnabledCache = null;
   state.activeTransitStationCache = null;
   state.activeTransitStationEntryCache = null;
+  state.activeTransitStationByModeCache = null;
   syncTravelModeToggles();
   syncBrowserUrl();
   state.dirty = true;
@@ -1964,7 +2065,7 @@ function runDijkstra(origin) {
   const distances = new Array(stateCount).fill(Infinity);
   const visited = new Array(stateCount).fill(false);
   const seeds = hasActiveTransitMode()
-    ? nearestStations(origin.point, state.data.meta.originStationCount, activeTransitStationIndices())
+    ? nearestStationsAcrossActiveModes(origin.point, state.data.meta.originStationCount)
     : [];
   const queue = new MinHeap();
 
@@ -2021,11 +2122,10 @@ function directTravelMinutes(origin, destination) {
   let bestMinutes = Infinity;
 
   if (state.activeModes.drive) {
+    const driveDistance = directDistance * DIRECT_MODE_DISTANCE_MULTIPLIERS.drive;
     bestMinutes = Math.min(
       bestMinutes,
-      (directDistance * DIRECT_MODE_DISTANCE_MULTIPLIERS.drive) / DIRECT_MODE_SPEEDS.drive +
-        DRIVE_ACCESS_PENALTY_MINUTES +
-        swimMinutes,
+      driveDistance / driveSpeedMetersPerMinute(driveDistance) + DRIVE_ACCESS_PENALTY_MINUTES + swimMinutes,
     );
   }
   if (state.activeModes.bike) {
@@ -2049,7 +2149,7 @@ function estimateTravel(origin, originDistances, destinationPoint) {
   const swimMinutes = origin.swimMinutes + destination.swimMinutes;
   let bestMinutes = directTravelMinutes(origin, destination);
   const nearby = hasActiveTransitMode()
-    ? nearestStations(destination.point, state.data.meta.cellNearestStations, activeTransitStationIndices())
+    ? nearestStationsAcrossActiveModes(destination.point, state.data.meta.cellNearestStations)
     : [];
   for (const station of nearby) {
     for (const routeStateIndex of state.data.stationStates[station.index] || []) {
