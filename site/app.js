@@ -747,10 +747,15 @@ function syncTravelModeToggles() {
 
 function setTravelMode(mode, enabled) {
   if (!TRAVEL_MODE_KEYS.includes(mode)) return;
-  state.activeModes = {
-    ...state.activeModes,
-    [mode]: enabled,
-  };
+  const nextModes = { ...state.activeModes, [mode]: enabled };
+  if (!TRAVEL_MODE_KEYS.some((key) => nextModes[key])) {
+    // Refuse to leave every travel mode off -- nothing would be reachable,
+    // so warp/heatmap/outline would all have nothing to show. Revert the
+    // checkbox that just unchecked itself back to its prior state.
+    syncTravelModeToggles();
+    return;
+  }
+  state.activeModes = nextModes;
   state.warpCache = null;
   state.liveWarpCache = null;
   state.baseMapCache = null;
@@ -1365,14 +1370,20 @@ function parseSharedView() {
   const heatmap = searchParams.has("heatmap") ? searchParams.get("heatmap") !== "0" : null;
   const outline = searchParams.has("outline") ? searchParams.get("outline") !== "0" : null;
   const modesRaw = searchParams.has("modes") ? searchParams.get("modes") : null;
-  const modes = modesRaw !== null
-    ? sanitizeTravelModes(
-        modesRaw.split(",").reduce((memo, mode) => {
-          if (TRAVEL_MODE_KEYS.includes(mode)) memo[mode] = true;
-          return memo;
-        }, {}),
-      )
-    : null;
+  const parsedModes =
+    modesRaw !== null
+      ? sanitizeTravelModes(
+          modesRaw.split(",").reduce((memo, mode) => {
+            if (TRAVEL_MODE_KEYS.includes(mode)) memo[mode] = true;
+            return memo;
+          }, {}),
+        )
+      : null;
+  // A blank or garbage `modes` value (e.g. an old link saved back when every
+  // mode was off) parses to "every mode off" -- ignore it and fall back to
+  // the app's own defaults rather than restoring a state where nothing can
+  // ever be reachable.
+  const modes = parsedModes && TRAVEL_MODE_KEYS.some((key) => parsedModes[key]) ? parsedModes : null;
   return { origin, probe, zoom, warp, heatmap, outline, modes };
 }
 
