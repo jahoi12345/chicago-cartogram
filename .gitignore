@@ -19,3 +19,4 @@ site/data/
 *.swo
 *.swn
 *~
+.dev.vars

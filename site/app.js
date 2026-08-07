@@ -76,6 +76,13 @@ const DIRECT_MODE_DISTANCE_MULTIPLIERS = {
   walk: 1,
 };
 const DRIVE_ACCESS_PENALTY_MINUTES = 4;
+// Fill in with your deployed routing-proxy Worker URL (see worker/index.js and
+// README) to have the pinned probe measurement follow real streets for
+// walk/bike/drive instead of the straight-line estimate above. Left blank,
+// this feature silently no-ops and the app behaves exactly as before.
+const ROAD_ROUTING_PROXY_URL = "";
+const ROAD_ROUTING_PROFILES = { walk: "foot-walking", bike: "cycling-regular", drive: "driving-car" };
+const ROAD_ROUTING_TIMEOUT_MS = 6000;
 const WARP_QUALITY_OPTIONS = {
   full: {
     quality: "full",
@@ -157,6 +164,7 @@ const state = {
   compareOrigin: null,
   compareDijkstraCache: null,
   compareStats: null,
+  roadRouteCache: null,
   dirty: true,
 };
 
@@ -2060,6 +2068,69 @@ function estimateTravel(origin, originDistances, destinationPoint) {
   };
 }
 
+function roadRouteCacheKey(originPoint, destPoint) {
+  const origin = worldToLonLat(originPoint);
+  const dest = worldToLonLat(destPoint);
+  return [origin.lon, origin.lat, dest.lon, dest.lat].map((v) => v.toFixed(5)).join(",");
+}
+
+async function fetchRoadRoute(originLonLat, destLonLat, mode) {
+  if (!ROAD_ROUTING_PROXY_URL) return null;
+  const profile = ROAD_ROUTING_PROFILES[mode];
+  if (!profile) return null;
+  const params = new URLSearchParams({
+    profile,
+    start: `${originLonLat.lon},${originLonLat.lat}`,
+    end: `${destLonLat.lon},${destLonLat.lat}`,
+  });
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), ROAD_ROUTING_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${ROAD_ROUTING_PROXY_URL}/route?${params}`, { signal: controller.signal });
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (!Number.isFinite(data.minutes)) return null;
+    return { minutes: data.minutes, meters: data.meters };
+  } catch (error) {
+    return null;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+function requestRoadRoutesForProbe() {
+  if (!ROAD_ROUTING_PROXY_URL || !state.probePoint || !state.originPoint) return;
+  const key = roadRouteCacheKey(state.originPoint, state.probePoint);
+  if (state.roadRouteCache?.key === key) return;
+
+  const cache = { key, results: {} };
+  state.roadRouteCache = cache;
+
+  const originLonLat = worldToLonLat(state.originPoint);
+  const destLonLat = worldToLonLat(state.probePoint);
+
+  for (const mode of ["walk", "bike", "drive"]) {
+    if (!state.activeModes[mode]) continue;
+    fetchRoadRoute(originLonLat, destLonLat, mode).then((result) => {
+      if (state.roadRouteCache !== cache) return;
+      cache.results[mode] = result;
+      state.dirty = true;
+      requestDraw();
+    });
+  }
+}
+
+function formatRoadRouteLines(results) {
+  const labels = { walk: "Walk", bike: "Bike", drive: "Drive" };
+  const lines = [];
+  for (const mode of ["walk", "bike", "drive"]) {
+    if (!state.activeModes[mode] || !(mode in results)) continue;
+    const result = results[mode];
+    lines.push(result ? `${labels[mode]} ${Math.round(result.minutes)} min by road` : `${labels[mode]}: road route unavailable`);
+  }
+  return lines;
+}
+
 function summarizeReachability(origin, originDistances) {
   const stationEntries = activeTransitStationEntries();
   const totalStations = stationEntries.length;
@@ -2965,7 +3036,11 @@ function drawMap(drawCtx, width, height) {
     const probe = measureProbeFromWarp(normalizedOrigin, warp, activeProbePoint);
     statusText.textContent = (station ? `Pinned near ${station.name}` : "Pinned origin") + unreachableNote;
     if (layerVisible("interactionMarkers") && probe && activeProbeScreen) {
-      drawHoverTooltip(drawCtx, activeProbeScreen, formatDistanceLabel(probe.baseMinutes, probe.swimMinutes));
+      const roadLines =
+        state.probePoint && state.roadRouteCache?.key === roadRouteCacheKey(state.originPoint, state.probePoint)
+          ? formatRoadRouteLines(state.roadRouteCache.results)
+          : [];
+      drawHoverTooltip(drawCtx, activeProbeScreen, formatDistanceLabel(probe.baseMinutes, probe.swimMinutes), roadLines);
     }
   } else {
     statusText.textContent = nothingReachable
@@ -3002,17 +3077,26 @@ function drawMarker(drawCtx, screenPoint, color, glowRadius, radius, glowAlpha =
   drawCtx.stroke();
 }
 
-function drawHoverTooltip(drawCtx, screenPoint, label) {
+function drawHoverTooltip(drawCtx, screenPoint, label, extraLines = []) {
   const [sx, sy] = screenPoint;
   drawCtx.save();
-  drawCtx.font = '700 13px "Avenir Next", "Helvetica Neue", Helvetica, sans-serif';
   drawCtx.textAlign = "center";
   drawCtx.textBaseline = "middle";
 
-  const metrics = drawCtx.measureText(label);
+  const mainFont = '700 13px "Avenir Next", "Helvetica Neue", Helvetica, sans-serif';
+  const extraFont = '600 11px "Avenir Next", "Helvetica Neue", Helvetica, sans-serif';
+
+  drawCtx.font = mainFont;
+  const mainWidth = drawCtx.measureText(label).width;
+  drawCtx.font = extraFont;
+  const extraWidth = extraLines.reduce((max, line) => Math.max(max, drawCtx.measureText(line).width), 0);
+
   const paddingX = 10;
-  const boxWidth = metrics.width + paddingX * 2;
-  const boxHeight = 28;
+  const paddingY = 4;
+  const mainRowHeight = 20;
+  const extraRowHeight = 15;
+  const boxWidth = Math.max(mainWidth, extraWidth) + paddingX * 2;
+  const boxHeight = paddingY * 2 + mainRowHeight + extraLines.length * extraRowHeight;
   const boxX = clamp(sx - boxWidth / 2, 12, drawCtx.canvas.clientWidth - boxWidth - 12);
   const boxY = clamp(sy + 16, 12, drawCtx.canvas.clientHeight - boxHeight - 12);
 
@@ -3021,8 +3105,21 @@ function drawHoverTooltip(drawCtx, screenPoint, label) {
   drawCtx.roundRect(boxX, boxY, boxWidth, boxHeight, 10);
   drawCtx.fill();
 
+  const centerX = boxX + boxWidth / 2;
+  let rowTop = boxY + paddingY;
+
+  drawCtx.font = mainFont;
   drawCtx.fillStyle = "#fff8ef";
-  drawCtx.fillText(label, boxX + boxWidth / 2, boxY + boxHeight / 2 + 0.5);
+  drawCtx.fillText(label, centerX, rowTop + mainRowHeight / 2 + 0.5);
+  rowTop += mainRowHeight;
+
+  drawCtx.font = extraFont;
+  drawCtx.fillStyle = "rgba(255, 248, 239, 0.78)";
+  for (const line of extraLines) {
+    drawCtx.fillText(line, centerX, rowTop + extraRowHeight / 2 + 0.5);
+    rowTop += extraRowHeight;
+  }
+
   drawCtx.restore();
 }
 
@@ -3448,6 +3545,7 @@ function setProbePoint(worldPoint) {
 function clearProbePoint() {
   state.probePoint = null;
   state.probePinned = false;
+  state.roadRouteCache = null;
   syncBrowserUrl();
 }
 
@@ -3559,6 +3657,7 @@ function handleMobilePointerUp(event) {
 
   if (dragTarget === "pan" && !moved) {
     setProbePoint(state.panGestureStartWorld);
+    requestRoadRoutesForProbe();
     syncBrowserUrl();
     state.dirty = true;
     requestDraw();
@@ -3585,6 +3684,7 @@ function handleMobilePointerUp(event) {
       syncBrowserUrl();
     } else if (dragTarget === "probe") {
       state.probePinned = true;
+      requestRoadRoutesForProbe();
       syncBrowserUrl();
     }
     state.dirty = true;
@@ -3644,6 +3744,7 @@ function handleDesktopPointerUp(event) {
 
   if (dragTarget === "pan" && !moved) {
     setProbePoint(state.panGestureStartWorld);
+    requestRoadRoutesForProbe();
     syncBrowserUrl();
     state.dirty = true;
     requestDraw();
@@ -3670,6 +3771,7 @@ function handleDesktopPointerUp(event) {
       syncBrowserUrl();
     } else if (dragTarget === "probe") {
       state.probePinned = true;
+      requestRoadRoutesForProbe();
       syncBrowserUrl();
     }
     state.dirty = true;
@@ -4067,6 +4169,7 @@ async function init() {
         if (withinBounds(restoredProbe)) {
           state.probePoint = restoredProbe;
           state.probePinned = true;
+          requestRoadRoutesForProbe();
         }
       }
     }
