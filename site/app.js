@@ -166,6 +166,9 @@ const originFrequencyNote = document.getElementById("originFrequencyNote");
 const warpToggle = document.getElementById("warpToggle");
 const heatmapToggle = document.getElementById("heatmapToggle");
 const outlineToggle = document.getElementById("outlineToggle");
+const flatWaitToggle = document.getElementById("flatWaitToggle");
+const mobileFlatWaitToggle = document.getElementById("mobileFlatWaitToggle");
+const flatWaitToggles = [flatWaitToggle, mobileFlatWaitToggle].filter(Boolean);
 const heatmapLegend = document.getElementById("heatmapLegend");
 const heatmapLegendMin = document.getElementById("heatmapLegendMin");
 const heatmapLegendMax = document.getElementById("heatmapLegendMax");
@@ -306,6 +309,7 @@ function getTravelSettingsDefaults() {
     transitTime: meta.defaultBoardWait ?? DEFAULT_TRANSIT_TIME_MINUTES,
     transferTime: meta.transferPenalty ?? 4,
     maxTransitTime: DEFAULT_MAX_TIME_MINUTES,
+    useFlatWait: false,
   };
 }
 
@@ -337,6 +341,7 @@ function sanitizeTravelSettings(rawSettings, defaults = state.travelSettingsDefa
       15,
       120,
     ),
+    useFlatWait: Boolean(raw.useFlatWait ?? defaults.useFlatWait),
   };
 }
 
@@ -706,6 +711,9 @@ function syncTravelSettingsInputs() {
   }
   for (const button of timeBudgetPresetButtons) {
     button.classList.toggle("is-active", Number(button.dataset.presetMinutes) === Math.round(settings.maxTransitTime));
+  }
+  for (const toggle of flatWaitToggles) {
+    toggle.checked = Boolean(settings.useFlatWait);
   }
 }
 
@@ -1956,9 +1964,10 @@ function runDijkstra(origin) {
     for (const routeStateIndex of state.data.stationStates[seed.index] || []) {
       if (!isRouteStateEnabled(routeStateIndex)) continue;
       const routeId = state.data.routeStates[routeStateIndex].routeId;
-      const boardingDelta =
-        (state.data.routeWaits?.[routeId] ?? state.travelSettingsDefaults.transitTime) -
-        state.travelSettingsDefaults.transitTime;
+      const boardingDelta = settings.useFlatWait
+        ? 0
+        : (state.data.routeWaits?.[routeId] ?? state.travelSettingsDefaults.transitTime) -
+          state.travelSettingsDefaults.transitTime;
       const candidate = origin.swimMinutes + seed.walkMinutes + settings.transitTime + boardingDelta;
       if (candidate < distances[routeStateIndex]) {
         distances[routeStateIndex] = candidate;
@@ -1974,16 +1983,17 @@ function runDijkstra(origin) {
     visited[current] = true;
     for (const edge of dynamicEdgesForState(current)) {
       if (!isRouteStateEnabled(edge.toIndex)) continue;
+      const boardingDelta = settings.useFlatWait ? 0 : edge.boardingDelta;
       const weight =
         edge.kind === "ride"
           ? edge.rideMinutes
           : edge.kind === "transfer"
-            ? settings.transferTime + settings.transitTime + edge.boardingDelta
+            ? settings.transferTime + settings.transitTime + boardingDelta
             : edge.walkDistance / settings.walkingSpeed +
               edge.walkPenalty +
               settings.transferTime +
               settings.transitTime +
-              edge.boardingDelta;
+              boardingDelta;
       const nextIndex = edge.toIndex;
       const candidate = distances[current] + weight;
       if (candidate < distances[nextIndex]) {
@@ -2222,7 +2232,8 @@ function describeStationFrequency(stationIndex) {
 }
 
 function syncOriginFrequencyNote(stationIndex) {
-  const text = hasActiveTransitMode() ? describeStationFrequency(stationIndex) : null;
+  const text =
+    hasActiveTransitMode() && !currentTravelSettings().useFlatWait ? describeStationFrequency(stationIndex) : null;
   for (const el of [originFrequencyNote, mobileOriginFrequencyNote]) {
     if (!el) continue;
     if (text) {
@@ -4118,6 +4129,12 @@ async function init() {
       const minutes = Number(button.dataset.presetMinutes);
       if (!Number.isFinite(minutes)) return;
       applyTravelSettings({ ...currentTravelSettings(), maxTransitTime: minutes });
+    });
+  }
+
+  for (const toggle of flatWaitToggles) {
+    toggle.addEventListener("change", () => {
+      applyTravelSettings({ ...currentTravelSettings(), useFlatWait: toggle.checked });
     });
   }
 
