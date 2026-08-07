@@ -744,6 +744,12 @@ body {
   cursor: not-allowed;
 }
 
+.favorites-save-button.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff8ef;
+}
+
 .favorites-list {
   display: flex;
   flex-wrap: wrap;

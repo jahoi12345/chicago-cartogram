@@ -153,6 +153,10 @@ const state = {
   fullWarpSettleFrame: null,
   travelSettings: null,
   travelSettingsDefaults: null,
+  compareModeActive: false,
+  compareOrigin: null,
+  compareDijkstraCache: null,
+  compareStats: null,
   dirty: true,
 };
 
@@ -261,6 +265,16 @@ const searchUis = [
 const favoritesUis = [
   { saveButton: saveFavoriteButton, list: favoritesList, empty: favoritesEmpty },
   { saveButton: mobileSaveFavoriteButton, list: mobileFavoritesList, empty: mobileFavoritesEmpty },
+];
+
+const compareToggleButton = document.getElementById("compareToggleButton");
+const compareMeta = document.getElementById("compareMeta");
+const mobileCompareToggleButton = document.getElementById("mobileCompareToggleButton");
+const mobileCompareMeta = document.getElementById("mobileCompareMeta");
+
+const compareUis = [
+  { button: compareToggleButton, meta: compareMeta },
+  { button: mobileCompareToggleButton, meta: mobileCompareMeta },
 ];
 
 shareXIcon.src = new URL("./x.png", import.meta.url).toString();
@@ -629,6 +643,7 @@ function setTravelMode(mode, enabled) {
   state.baseMapCache = null;
   state.heatmapCache = null;
   state.cellAccessCache = null;
+  state.compareDijkstraCache = null;
   state.routeStateEnabledCache = null;
   state.activeTransitStationCache = null;
   state.activeTransitStationEntryCache = null;
@@ -699,6 +714,7 @@ function applyTravelSettings(nextSettings, { persist = true } = {}) {
   state.warpCache = null;
   state.liveWarpCache = null;
   state.heatmapCache = null;
+  state.compareDijkstraCache = null;
   syncTravelSettingsInputs();
   syncHeatmapLegend();
   if (persist) persistTravelSettings();
@@ -2063,6 +2079,96 @@ function summarizeReachability(origin, originDistances) {
   };
 }
 
+function reachableStationIndexSet(origin, originDistances, threshold) {
+  const indices = new Set();
+  for (const { index } of activeTransitStationEntries()) {
+    const destination = normalizedStationPoint(index);
+    let bestMinutes = directTravelMinutes(origin, destination);
+    for (const routeStateIndex of state.data.stationStates[index] || []) {
+      if (!isRouteStateEnabled(routeStateIndex)) continue;
+      bestMinutes = Math.min(
+        bestMinutes,
+        originDistances[routeStateIndex] + state.data.meta.stationAccessPenalty + destination.swimMinutes,
+      );
+    }
+    if (bestMinutes <= threshold) indices.add(index);
+  }
+  return indices;
+}
+
+function updateCompareStats(mainWarp) {
+  if (!state.compareOrigin || !state.originPoint || !mainWarp?.distances) {
+    state.compareStats = null;
+    syncCompareUi();
+    return;
+  }
+  const threshold = currentTravelSettings().maxTransitTime;
+  const normalizedOrigin = normalizeTravelPoint(state.originPoint);
+  const mainSet = reachableStationIndexSet(normalizedOrigin, mainWarp.distances, threshold);
+
+  const normalizedCompareOrigin = normalizeTravelPoint(state.compareOrigin.point);
+  if (!state.compareDijkstraCache) {
+    state.compareDijkstraCache = runDijkstra(normalizedCompareOrigin);
+  }
+  const compareSet = reachableStationIndexSet(normalizedCompareOrigin, state.compareDijkstraCache.distances, threshold);
+
+  let overlap = 0;
+  for (const index of mainSet) {
+    if (compareSet.has(index)) overlap += 1;
+  }
+
+  state.compareStats = {
+    mainCount: mainSet.size,
+    compareCount: compareSet.size,
+    overlap,
+  };
+  syncCompareUi();
+}
+
+function syncCompareUi() {
+  for (const ui of compareUis) {
+    if (!ui.button || !ui.meta) continue;
+    ui.button.disabled = !state.originPoint && !state.compareOrigin && !state.compareModeActive;
+    if (state.compareModeActive) {
+      ui.button.textContent = "Cancel";
+      ui.button.classList.add("is-active");
+      ui.meta.textContent = "Tap or click anywhere on the map to drop the second origin.";
+    } else if (state.compareOrigin) {
+      ui.button.textContent = "Clear origin B";
+      ui.button.classList.remove("is-active");
+      if (state.compareStats) {
+        const { mainCount, compareCount, overlap } = state.compareStats;
+        ui.meta.textContent = `${overlap} stations reachable from both origins (${mainCount - overlap} only from A, ${compareCount - overlap} only from B).`;
+      } else {
+        ui.meta.textContent = "Pin a main origin to compare reach with origin B.";
+      }
+    } else {
+      ui.button.textContent = "+ Add second origin";
+      ui.button.classList.remove("is-active");
+      ui.meta.textContent = state.originPoint
+        ? "Add a second origin to see where their reach overlaps."
+        : "Pin a main origin first, then add a second to see where their reach overlaps.";
+    }
+  }
+}
+
+function handleCompareToggleClick() {
+  if (state.compareModeActive) {
+    state.compareModeActive = false;
+  } else if (state.compareOrigin) {
+    state.compareOrigin = null;
+    state.compareDijkstraCache = null;
+    state.compareStats = null;
+  } else if (state.originPoint) {
+    state.compareModeActive = true;
+  } else {
+    return;
+  }
+  syncCompareUi();
+  state.dirty = true;
+  requestDraw();
+}
+
 function syncReachabilityScore(summary = null) {
   const minutes = Math.round(currentTravelSettings().maxTransitTime);
   const label = `${minutes}-Minute Reach`;
@@ -2766,6 +2872,7 @@ function drawMap(drawCtx, width, height) {
     projectPoint,
   };
   syncReachabilityScore(warp?.reachability ?? null);
+  updateCompareStats(warp);
 
   drawPanelBackground(drawCtx, width, height);
   drawLake(drawCtx, projectPoint, width, height);
@@ -2814,6 +2921,12 @@ function drawMap(drawCtx, width, height) {
     drawMarker(drawCtx, projectPoint(state.probePoint), "#17304d", 18, 4.3, 0.18);
   } else if (layerVisible("interactionMarkers") && state.pinned && state.cursorScreen) {
     drawMarker(drawCtx, state.cursorScreen, "#17304d", 18, 4.3, 0.18);
+  }
+
+  if (layerVisible("interactionMarkers") && state.compareOrigin) {
+    const compareScreen = projectPoint(state.compareOrigin.point);
+    drawMarker(drawCtx, compareScreen, "#2f8f6f", 22, 5, 0.42);
+    drawPinnedLabel(drawCtx, compareScreen, "Origin B", { align: "right" });
   }
 
   const activeProbePoint = state.probePoint || (state.isMobile ? null : state.cursorPoint);
@@ -3331,6 +3444,18 @@ function beginPinGesture(pointerId, screenPoint, worldPoint, hitRadius) {
   state.mobilePointerId = pointerId;
   state.mobileGestureStartScreen = screenPoint;
   state.mobileGestureMoved = false;
+
+  if (state.compareModeActive) {
+    state.mobileDragTarget = "compare";
+    state.compareOrigin = { point: worldPoint };
+    state.compareStats = null;
+    state.cursorScreen = screenPoint;
+    state.cursorPoint = worldPoint;
+    state.showPinHint = false;
+    state.dirty = true;
+    return;
+  }
+
   const hitTarget = hitPinTarget(screenPoint, hitRadius);
   state.mobileDragTarget = hitTarget || (!state.originPoint ? "new-origin" : "pan");
   state.panGestureStartScreen = null;
@@ -3377,6 +3502,8 @@ function updatePinGesture(screenPoint, worldPoint, tapSlop) {
     state.originPoint = worldPoint;
   } else if (state.mobileDragTarget === "probe") {
     setProbePoint(worldPoint);
+  } else if (state.mobileDragTarget === "compare") {
+    state.compareOrigin = { point: worldPoint };
   }
 
   state.dirty = true;
@@ -3432,6 +3559,12 @@ function handleMobilePointerUp(event) {
   } else if (dragTarget === "probe" && !moved) {
     clearProbePoint();
     state.dirty = true;
+    requestDraw();
+  } else if (dragTarget === "compare") {
+    state.compareModeActive = false;
+    state.compareDijkstraCache = null;
+    state.dirty = true;
+    syncCompareUi();
     requestDraw();
   } else {
     if (dragTarget === "origin" || dragTarget === "new-origin") {
@@ -3512,6 +3645,12 @@ function handleDesktopPointerUp(event) {
     clearProbePoint();
     state.dirty = true;
     requestDraw();
+  } else if (dragTarget === "compare") {
+    state.compareModeActive = false;
+    state.compareDijkstraCache = null;
+    state.dirty = true;
+    syncCompareUi();
+    requestDraw();
   } else {
     if (dragTarget === "origin" || dragTarget === "new-origin") {
       state.pinned = true;
@@ -3586,6 +3725,7 @@ function setPinnedOrigin(worldPoint) {
   state.dirty = true;
   syncMobileSheet();
   syncFavoritesUi();
+  syncCompareUi();
   requestDraw();
 }
 
@@ -3602,6 +3742,7 @@ function clearPinnedOrigin() {
   state.dirty = true;
   syncMobileSheet();
   syncFavoritesUi();
+  syncCompareUi();
   requestDraw();
 }
 
@@ -4239,6 +4380,10 @@ async function init() {
   if (saveFavoriteButton) saveFavoriteButton.addEventListener("click", handleSaveFavoriteClick);
   if (mobileSaveFavoriteButton) mobileSaveFavoriteButton.addEventListener("click", handleSaveFavoriteClick);
   syncFavoritesUi();
+
+  if (compareToggleButton) compareToggleButton.addEventListener("click", handleCompareToggleClick);
+  if (mobileCompareToggleButton) mobileCompareToggleButton.addEventListener("click", handleCompareToggleClick);
+  syncCompareUi();
 
   mobileLocateButton.addEventListener("click", () => {
     collapseMobileHelp();
