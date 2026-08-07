@@ -416,6 +416,7 @@ body {
 .settings-grid {
   display: grid;
   gap: 10px;
+  margin-bottom: 12px;
 }
 
 .settings-field {
