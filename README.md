@@ -1,5 +1,7 @@
 # Chicago Cartogram
 
+**Live site: https://jahoi12345.github.io/chicago-cartogram/**
+
 This is the Chicago MVP built alongside `nyc-cartogram/`, which remains a reference copy.
 
 It keeps the NYC project's look and features while swapping in Chicago inputs:
